@@ -20,6 +20,15 @@ This work is the result of a collaborative effort between **Kevin Wardakhan**, *
 - Build and validate a robust predictive model to forecast demand.
 - Use insights to better understand the behavior of users and inform management decisions for optimizing bike-sharing operations.
 
+## Project Structure
+```bash
+.
+├── abdelatif_ouabdesselam_wardakhan_codeR.rmd     # R Markdown notebook with code and analysis
+├── abdelatif_ouabdesselam_wardakhan_codeR.pdf     # Final report (compiled from R Markdown)
+├── MLG_Project_Instructions.pdf                    # Project guidelines and instructions
+└── README.md                                      # Project documentation (this file)
+
+```
 ## Methodology
 
 This project followed a structured and methodical approach with the following phases:
