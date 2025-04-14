@@ -1,0 +1,1313 @@
+---
+title: "Compte Rendu GLM"
+author: "Kevin Wardakhan, Ibrahim Abdelatif, Erwan Ouabdesselam"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    number_sections: true
+    toc_depth: 3
+  html_document:
+    toc: true
+    toc_depth: '3'
+    df_print: paged
+  word_document:
+    toc: true
+    toc_depth: '3'
+header-includes:
+- \usepackage{amsmath}
+- \usepackage{amssymb}
+- \usepackage{amsfonts}
+- \usepackage{graphicx}
+- \usepackage{titling}
+- \usepackage{titlesec}
+- \renewcommand{\contentsname}{Sommaire}
+- \setlength{\parindent}{0pt}
+- \setlength{\parskip}{0.5em}
+- \titleformat{\paragraph}[runin]{\bfseries\small}{\theparagraph}{1em}{}
+- \posttitle{\end{center}}
+---
+
+
+
+
+
+\newpage
+
+```{r setup2, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, results = 'hide', warning = FALSE, message = FALSE)
+```
+
+```{r, echo=FALSE}
+library(tidyverse)  
+library(dplyr)      
+library(ggfortify)
+library(rsample)
+library(corrplot)
+library(MASS)
+library(car)
+library(GGally)
+library(vcdExtra)
+library(gridExtra)
+
+
+options(encoding = "UTF-8")
+options(scipen = 999, digits = 5)
+
+```
+
+# Introduction
+
+Dans ce projet, nous avons cherché à comprendre les facteurs qui influencent le nombre de locations de vélos dans un système de partage urbain. En analysant un jeu de données détaillé, nous avons exploré les interactions entre plusieurs variables environnementales, temporelles et contextuelles, afin d’identifier celles qui impactent significativement la demande.
+
+L’objectif principal de cette étude est de développer un modèle prédictif robuste basé sur des modèles linéaires généralisés (GLM). Ce modèle permettra non seulement d’expliquer les variations de la demande en fonction des conditions externes, mais aussi de fournir des prévisions fiables pour optimiser la gestion et la répartition des ressources dans ce type de système.
+
+Ce rapport s’articule autour de plusieurs étapes clés :
+
+
+1. **Préparation et exploration des données**, avec un accent sur le nettoyage et la compréhension initiale des variables.  
+
+2. **Étude des relations entre les variables**, afin d’identifier les corrélations significatives.  
+
+3. **Modélisation statistique**, qui vise à construire un modèle prédictif performant.  
+
+**Interprétation des résultats**, avec des recommandations pour la gestion opérationnelle des systèmes de partage de vélos.
+
+
+---
+
+## Discussion sur la question d'intérêt
+
+### Pourquoi cette étude est-elle importante ?
+
+L’analyse des systèmes de partage de vélos revêt une importance particulière pour plusieurs raisons :  
+
+1. **Impact environnemental :** Ces systèmes offrent une alternative aux modes de transport polluants, contribuant ainsi à réduire les émissions de gaz à effet de serre et à améliorer la qualité de l’air. Une compréhension fine des comportements d’utilisation permet d’encourager leur adoption, favorisant ainsi la transition vers des mobilités durables.  
+
+2. **Avantages sociaux :** Les vélos en libre-service offrent une option économique et pratique pour les déplacements urbains, en particulier pour les personnes sans accès à un véhicule personnel.  
+
+3. **Optimisation opérationnelle :** Identifier les facteurs qui influencent la demande peut permettre une gestion plus efficace, notamment en optimisant la répartition des vélos entre les stations, en planifiant leur maintenance, et en anticipant les pics de demande.  
+
+En répondant à ces enjeux, cette étude contribue à améliorer l’efficacité et l’accessibilité des systèmes de partage de vélos, tout en soutenant les politiques publiques en faveur des mobilités douces.
+
+---
+
+## Description des variables prédictives et hypothèses associées
+
+Dans cette étude, nous avons analysé plusieurs variables explicatives, regroupées en trois grandes catégories:  
+
+### 1. Variables environnementales  
+- **Température moyenne et ressentie :** Nous supposons que des températures agréables favorisent l’utilisation des vélos, tandis que des températures extrêmes (chaleur ou froid) pourraient la réduire.  
+- **Humidité :** Une humidité élevée, souvent associée à des conditions inconfortables, pourrait dissuader les utilisateurs.  
+- **Vitesse du vent :** Nous faisons l’hypothèse que des vents faibles ont peu d’impact, mais des vents forts pourraient réduire la demande.  
+- **Conditions météorologiques (pluie/neige) :** Ces conditions devraient entraîner une baisse marquée des locations.  
+
+### 2. Variables temporelles  
+- **Saison :** Les saisons chaudes (printemps, été) devraient afficher une demande plus élevée, contrairement aux saisons froides (automne, hiver).  
+- **Jour de la semaine :** Les week-ends pourraient enregistrer une demande accrue, en raison d’une utilisation davantage récréative.  
+- **Horaire :** Nous supposons que les heures de pointe (matin et soir) correspondent à des pics d’utilisation liés aux trajets domicile-travail.  
+
+### 3. Variables contextuelles  
+- **Vacances :** Pendant les vacances, la demande pourrait diminuer pour les trajets domicile-travail, mais augmenter pour les loisirs.  
+- **Jour ouvré ou non :** Une demande plus constante est attendue les jours ouvrés, contrairement aux jours non ouvrés où elle pourrait être plus variable.  
+
+---
+
+## Hypothèses globales
+
+1. Les **conditions climatiques** (température, humidité, précipitations, vent) influencent directement la demande. Des conditions favorables encouragent les locations, tandis que des conditions défavorables les réduisent.  
+2. Les **facteurs temporels** (saisons, jours, horaires) déterminent des variations cycliques de la demande. Par exemple, la demande devrait être plus forte en été et pendant les heures de pointe.  
+3. Les **jours fériés ou périodes de vacances** pourraient présenter des schémas d’utilisation distincts, reflétant des comportements davantage orientés vers les loisirs.
+
+# Préparation et exploration des données
+
+## Chargement et nettoyage des données
+Le jeu de données a été chargé à partir d’un fichier CSV contenant $n=1817$ observations et $13$ variables explicatives.
+
+```{r, echo=FALSE}
+  data1 <- read.csv("projet.csv", header = TRUE, sep = ",", dec = ".")
+  head(data1, n = 20)
+```
+
+En analyse les données brutes nous avons décidé de retirers la première colonne, jugée inutile pour l’analyse. Les variables qualitatives (comme la saison ou le mois) ont été converties en facteurs pour permettre une analyse appropriée. Toutes les valeurs manquantes ont été identifiées pour garantir l’intégrité des données. De plus, les colonnes contenant des entiers ont été transformées en variables numériques afin d’améliorer leur compatibilité avec les outils d’analyse statistique.
+
+Ce prétraitement assure une structure cohérente et prête à l’emploi pour l’exploration et la modélisation des données.
+
+```{r, echo=FALSE}
+
+  data1 <- data1[, -1]
+  data1$saison <- as.factor(data1$saison)
+  data1$mois <- as.factor(data1$mois)
+  data1$jour_mois <- as.factor(data1$jour_mois)
+  data1$jour_semaine <- as.factor(data1$jour_semaine)
+  data1$horaire <- as.factor(data1$horaire)
+  data1$jour_travail <- as.factor(data1$jour_travail)
+  data1$meteo <- as.factor(data1$meteo)
+  data1$vacances <- as.factor(data1$vacances)
+  data1$velos <- as.numeric(data1$velos)
+  data1<- data1 %>% mutate(across(where(is.integer),as.numeric)) #On change tout les integers en numerics
+  
+
+  sapply(data1, function(x) sum(is.na(x))) #Il n'y a pas de valeurs manquantes dans le dataset 
+  str(data1)
+  
+  #On ajoute ici les variables transformées utilisées dans la partie modèle linéaire
+  data1$velos_transformed <- (data1$velos^0.24-1)/0.24 
+  data1$velos_sqrt <- sqrt(data1$velos)
+  data1$humidite2<-data1$humidite^2
+```
+
+## Analyse descriptive :
+
+### Distribution des variables
+
+Nous avons généré des tableaux de fréquences pour analyser la répartition des variables qualitatives, tandis que des statistiques descriptives ont été calculées pour synthétiser les caractéristiques des variables quantitatives (par exemple, la température et l'humidité).
+
+```{r, echo=FALSE}
+  tables <- list(
+  saison = as.data.frame(table(
+    Saison = factor(data1$saison, 
+                    levels = c(1, 2, 3, 4), 
+                    labels = c("Hiver", "Printemps", "Été", "Automne"))
+  )),
+  mois = as.data.frame(table(
+    Mois = factor(data1$mois, 
+                  levels = 1:12, 
+                  labels = c("Janvier", "Février", "Mars", "Avril", "Mai", 
+                             "Juin", "Juillet", "Août", "Septembre", 
+                             "Octobre", "Novembre", "Décembre"))
+  )),
+  jour_semaine = as.data.frame(table(
+    JourSemaine = factor(data1$jour_semaine, 
+                         levels = 1:7, 
+                         labels = c("Dimanche", "Lundi", "Mardi", 
+                                    "Mercredi", "Jeudi", 
+                                    "Vendredi", "Samedi"))
+  )),
+  horaire = as.data.frame(table(
+    Horaire = factor(data1$horaire, 
+                     levels = 1:5, 
+                     labels = c("[0h-7h]", "[7h-11h]", "[11h-15h]", 
+                                "[15h-19h]", "[19h-24h]"))
+  )),
+  jour_travail = as.data.frame(table(
+    JourTravail = factor(data1$jour_travail, 
+                         levels = c(1, 2), 
+                         labels = c("Non", "Oui"))
+  )),
+  vacances = as.data.frame(table(
+    Vacances = factor(data1$vacances, 
+                      levels = c(1, 2), 
+                      labels = c("Non", "Oui"))
+  )),
+  meteo = as.data.frame(table(
+    Meteo = factor(data1$meteo, 
+                   levels = c(1, 2, 3), 
+                   labels = c("Claire", "Nuageux/Brumeux", "Pluie/Neige"))
+  ))
+)
+
+tables$saison 
+tables$mois
+tables$jour_semaine
+tables$horaire
+tables$jour_travail
+tables$vacances
+tables$meteo
+
+
+cat("summary pour température1", summary(data1$temperature1))
+cat("\n")
+cat("summary pour température2", summary(data1$temperature2))
+cat("\n")
+cat("summary pour vent", summary(data1$vent))
+cat("\n")
+cat("summary pour humidité", summary(data1$humidite))
+```
+
+
+
+
+#### Distribution des locations de vélos  
+
+On observe la distribution de la variable vélos à l'aide d'un histogramme.
+
+```{r,echo=FALSE}
+ggplot(data1, aes(x = velos)) +
+  geom_histogram(binwidth = 50, fill = "red", color = "black") +
+  labs(title = "Distribution de la variable vélos", x = "Nombre de vélos louer", y = "Frequence")
+```
+
+La distribution des locations de vélos montre une concentration des fréquences entre 200 et 1500, avec un pic autour de 200-300.
+La fréquence diminue pour des valeurs supérieures à 1650, indiquant que des locations très élevées sont rares.
+La distribution est légèrement asymétrique, suggérant une variabilité dans la demande.
+
+### Distribution des autres variablees numériques
+
+```{r,echo=FALSE}
+
+
+# Créer des histogrammes pour plusieurs variables
+p1 <- ggplot(data1, aes(x = temperature1)) +
+  geom_histogram(binwidth = 2, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution de la Température Moyenne (°C)", 
+       x = "Température Moyenne (°C)", y = "Fréquence") +
+  theme_minimal()+ theme(
+    plot.title = element_text(size = 10) 
+  )
+
+p2 <- ggplot(data1, aes(x = temperature2)) +
+  geom_histogram(binwidth = 2, fill = "green", color = "black", alpha = 0.7) +
+  labs(title = "Distribution de la Température Ressentie (°C)", 
+       x = "Température Ressentie (°C)", y = "Fréquence") +
+  theme_minimal() + theme(
+    plot.title = element_text(size = 10) 
+  )
+
+p3 <- ggplot(data1, aes(x = vent)) +
+  geom_histogram(binwidth = 2, fill = "purple", color = "black", alpha = 0.7) +
+  labs(title = "Distribution de la Vitesse du Vent (km/h)", 
+       x = "Vitesse du Vent (km/h)", y = "Fréquence") +
+  theme_minimal()+ theme(
+    plot.title = element_text(size = 10) 
+  )
+
+p4 <- ggplot(data1, aes(x = humidite)) +
+  geom_histogram(binwidth = 5, fill = "orange", color = "black", alpha = 0.7) +
+  labs(title = "Distribution de l'Humidité (%)", 
+       x = "Humidité (%)", y = "Fréquence") +
+  theme_minimal()+ theme(
+    plot.title = element_text(size = 10) 
+  )
+
+# Afficher les graphiques côte à côte sur une même page
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+
+```
+
+```{r,echo=FALSE}
+  #On centre et réduit les données quantitatives
+
+  data1$temperature2 <- scale(data1$temperature2)
+  data1$temperature1 <- scale(data1$temperature1)
+  data1$vent <- scale(data1$vent)
+  data1$humidite <- scale(data1$humidite)
+```
+
+Ces graphiques illustrent les distributions des variables quantitatives clés du dataset. 
+
+
+
+1. **Température Moyenne (°C)**:  
+
+   - La distribution de la température moyenne est presque uniforme, avec des fréquences relativement similaires pour des températures comprises entre 5°C et 30°C.  
+   
+   - Les températures extrêmes (inférieures à 5°C ou supérieures à 30°C) sont moins fréquentes.  
+   
+   - Cela suggère que la majorité des observations ont lieu dans une plage de température modérée, ce qui pourrait refléter une utilisation accrue des vélos dans des conditions climatiques favorables.
+
+2. **Température Ressentie (°C)**  
+
+   - La température ressentie suit une distribution similaire à celle de la température moyenne, ce qui est attendu étant donné leur forte corrélation.  
+   
+   - Les fréquences augmentent entre 5°C et 20°C, puis diminuent au-delà de 30°C.  
+   
+   - Cette répartition peut indiquer que les utilisateurs perçoivent des conditions similaires à celles mesurées, sans écart significatif.
+
+3. **Vitesse du Vent (km/h)**  
+
+   - La vitesse du vent suit une distribution asymétrique, avec une forte concentration des valeurs entre 5 et 20 km/h.  
+   
+   - Les vitesses supérieures à 40 km/h sont rares.  
+   
+   - Cela montre que la majorité des observations se produisent dans des conditions de vent modéré, probablement en raison de l'inconfort potentiel des vents forts pour les cyclistes.
+
+4. **Humidité (%)**  
+
+
+   - L'humidité présente une distribution bimodale, avec des pics de fréquence autour de 50% et 80%.  
+   
+   - Les valeurs très faibles d'humidité (< 20%) sont rares, ce qui reflète probablement les conditions météorologiques locales.  
+   
+   - Cette variabilité de l'humidité peut influencer les préférences des utilisateurs pour l'utilisation des vélos.  
+   
+
+#### Observations générales
+
+- Ces graphiques mettent en évidence des distributions cohérentes avec les données climatiques et météorologiques typiques.
+- Les variables "température moyenne" et "température ressentie" montrent une plage de valeurs similaires, confirmant leur relation étroite.
+- L'humidité et la vitesse du vent, bien qu'importantes pour le confort des utilisateurs, présentent des fréquences moins uniformes, ce qui peut nécessiter une analyse plus approfondie pour comprendre leur impact sur la demande en vélos.
+
+Ces observations fournissent un aperçu des conditions environnementales rencontrées et leur potentielle influence sur l'utilisation des vélos, ce qui est essentiel pour les analyses suivantes et la modélisation.
+
+
+
+### Séparation des données pour le train et le test
+
+Les données ont été divisées en ensemble d’apprentissage (70%) et de test (30%). Le modèle a été évalué à l’aide de l’erreur quadratique moyenne (MSE).
+
+```{r,echo=FALSE}
+set.seed(123)
+data1_split <- rsample::initial_split(data1,prop=0.7)
+train<- rsample::training(data1_split)
+test<- rsample::testing(data1_split)
+```
+
+
+### Analyse des corrélation entre variables quantitatives
+Pour mieux comprendre les interactions entre les variables quantitatives du jeu de données, nous avons utilisé :  
+
+1. **Matrice de corrélation** : Elle met en évidence les degrés de corrélation entre les variables quantitatives en utilisant une représentation graphique intuitive.
+
+
+```{r,echo=FALSE,fig.align='center'}
+data2 <- data1[9:13]  # On sélectionne uniquement les variables quantitatives
+#ggpairs(data2) #il y a un conflit entre les libraires la fonction ne fonctionne pas
+```
+
+Cette matrice permet d’identifier rapidement des relations linéaires potentielles entre les variables et d’évaluer la dispersion des données.
+
+\newpage
+
+#### Matrice de corrélation
+
+```{r,echo=FALSE, fig.align='center'}
+
+variables <- data1[c("temperature1", "temperature2", "vent", "humidite", "velos")]
+correlation_matrix <- cor(variables)
+
+corrplot(correlation_matrix, order = 'hclust',addrect = 3)
+
+```
+
+Le corrélogramme représente visuellement les corrélations entre les variables. Les cercles colorés indiquent l'intensité et la direction de la corrélation : 
+
+- Les cercles bleus signifient une corrélation positive, 
+- Les cercles rouges indiquent une corrélation négative, 
+- La taille et la couleur des cercles reflètent la force de la corrélation.
+
+**Résultats principaux :**
+
+Les analyses réalisées à l’aide de la matrice de paires et du corrélogramme ont mis en évidence des relations cohérentes et significatives entre les variables quantitatives :
+
+1. **Corrélations principales :**
+   - Le nombre de vélos loués (**vélos**) est **positivement corrélé** avec les températures (**corr ≈ 0.577**), indiquant que des températures plus élevées favorisent les locations.
+   - Une **corrélation négative** est observée entre **vélos** et l’humidité (**corr ≈ -0.287**), ce qui montre que des conditions humides réduisent la demande en vélos.
+   - La vitesse du vent présente une **corrélation négligeable** avec les locations (**corr ≈ 0.037**), suggérant que cette variable a peu d’influence.
+
+2. **Relations spécifiques entre les variables :**
+   - Les deux mesures de température (**température1** et **température2**) sont **très fortement corrélées** (**corr ≈ 0.994**), ce qui révèle une redondance. Une seule de ces variables pourrait être retenue pour la modélisation.
+   - Les tendances identifiées dans le corrélogramme sont visuellement confirmées par la matrice de paires, renforçant la compréhension des interactions entre les covariables.
+
+#### Observations globales
+
+  - Les variables climatiques, comme la température et l’humidité, apparaissent comme des facteurs déterminants de la demande en vélos.
+  - Les redondances entre certaines variables, comme les deux mesures de température, nécessitent une simplification ou une sélection avant la modélisation pour éviter une surcharge de variables corrélées.
+  - La vitesse du vent, avec son faible niveau de corrélation, semble avoir un impact limité et pourrait être considérée comme secondaire dans l’analyse.
+
+**En conclusion,** cette analyse souligne l’importance des conditions climatiques, en particulier la température et l’humidité, sur l’utilisation des vélos. Ces résultats fourniront une base solide pour les prochaines étapes de modélisation, en identifiant les variables à privilégier pour construire un modèle prédictif robuste et fiable. 
+
+
+### Analyse des relations entre les variables catégoriques et la cible
+
+Pour analyser les relations entre les variables catégoriques et le nombre de vélos loués, des **boxplots** combinés à des points de dispersion ont été générés. Ces graphiques permettent de visualiser les tendances, la variabilité, et les éventuelles valeurs extrêmes selon différentes catégories.
+
+
+
+#### Relation avec la saison
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = saison, y = velos)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.6) + 
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par saison", 
+       x = "Saison", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Tendances générales :**
+
+  - Une demande plus faible est observée en hiver (saison 1), tandis que l’été (saison 3) et l’automne (saison 4) montrent des médianes plus élevées, reflétant une augmentation des locations pendant les saisons chaudes.
+
+**Variabilité :**
+
+  - Une dispersion plus importante est visible en été et en automne, possiblement en raison d’événements ou de pics d’utilisation spécifiques.
+
+
+
+#### Relation avec le mois
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = mois, y = velos)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.6) +
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par mois", 
+       x = "Mois", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Tendances saisonnières :**
+
+  - Les mois d’été (mai à septembre) montrent une augmentation significative des locations, tandis que les mois d’hiver (décembre à février) enregistrent une demande nettement plus faible.
+
+**Variabilité :**
+
+  - Une plus grande dispersion est visible pendant les mois chauds, ce qui peut être attribué à une augmentation de la demande pendant des événements particuliers ou par beau temps.
+
+\newpage
+
+#### Relation avec les jours de la semaine
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = jour_semaine, y = velos)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.6) +
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par jour de la semaine", 
+       x = "Jour de la semaine", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Tendances générales :**
+
+  - Les médianes restent globalement stables tout au long de la semaine.
+  - Une légère augmentation est visible pendant le week-end (jours 6 et 7), indiquant un usage récréatif accru.
+
+**Dispersion :**
+
+  - Les week-ends montrent une variabilité plus importante, probablement liée à des sorties de loisirs ou des activités spécifiques.
+
+
+
+#### Relation avec les tranches horaires
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = horaire, y = velos)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.6) +
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par horaire", 
+       x = "Horaire", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Tendances générales :**
+
+  - Une faible demande est observée entre 0h et 7h (horaire 1), ce qui est cohérent avec les habitudes de sommeil.
+  - La demande augmente progressivement entre 7h et 19h, atteignant un pic entre 15h et 19h (horaire 4), correspondant aux retours de travail ou aux activités de fin de journée.
+
+**Variabilité :**
+
+  - Les horaires 15h-19h montrent une dispersion plus importante, indiquant une utilisation à la fois régulière et opportuniste.
+
+
+
+#### Relation avec les jours de travail
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = jour_travail, y = velos)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.6) +
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par jour de travail", 
+       x = "Jour de travail", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Comparaison semaine vs week-end :**
+
+  - Les médianes sont similaires entre les jours de semaine (jour_travail = Oui) et les week-ends (jour_travail = Non).
+  - Les week-ends présentent une variabilité plus marquée, liée à une utilisation plus diversifiée.
+
+
+
+#### Relation avec les périodes de vacances
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = vacances, y = velos)) + 
+  geom_boxplot(fill = "lightblue", alpha = 0.6) +
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par vacances", 
+       x = "Vacances", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Comparaison vacances vs. non-vacances :**
+
+  - Les locations de vélos sont nettement plus fréquentes et variables en dehors des périodes de vacances.
+  - Pendant les vacances, la demande est significativement réduite, avec des médianes plus basses et moins de dispersion.
+
+
+
+#### Relation avec la météo
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = meteo, y = velos)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.6) +
+  geom_jitter(color = "darkblue", width = 0.2, alpha = 0.5) +
+  labs(title = "Nombre de vélos loués par météo", 
+       x = "Météo", y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Comparaison des conditions météorologiques :**
+
+  - **Temps clair** : Les locations sont les plus fréquentes, avec une forte dispersion, indiquant une utilisation accrue par beau temps.
+  - **Nuageux/Brumeux** : Une légère diminution de la demande est observée.
+  - **Pluie/Neige** : La demande chute fortement, avec des médianes basses et peu de variabilité.
+
+
+
+### Conclusion
+
+Les analyses montrent que les variables catégoriques influencent significativement la demande en vélos :  
+
+  - Les **saisons chaudes** et les **beaux jours** favorisent une utilisation accrue.  
+  
+  - Les **week-ends** et les **heures de pointe** affichent une demande plus élevée, tandis que les périodes de **vacances** et les **mauvaises conditions météorologiques** réduisent considérablement les locations.  
+  
+Ces observations permettent d’adapter la gestion des vélos en fonction des périodes et des conditions spécifiques.  
+
+Voici une version améliorée et plus structurée de cette section, avec un langage plus clair et des conclusions synthétiques.
+
+
+
+## Étude des relations entre les variables quantitatives et la cible
+
+L’objectif de cette analyse est d’identifier les relations entre les variables quantitatives (température, vent, humidité) et le nombre de vélos loués. Chaque graphique ci-dessous illustre une relation spécifique à l’aide d’un nuage de points et d’une ligne de régression linéaire.
+
+
+
+### Relation entre la température moyenne et le nombre de vélos loués
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = temperature1, y = velos)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Relation entre Température moyenne et Nombre de vélos loués", 
+       x = "Température moyenne (°C)", 
+       y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Analyse :**
+
+  - **Tendance générale :** Une relation positive claire est observée : à mesure que la température augmente, le nombre de vélos loués augmente également.
+  - **Dispersion :**
+    - À des températures basses (\<10°C), la demande est faible et moins variable.
+    - À des températures plus élevées (\>20°C), la demande augmente significativement avec une plus grande variabilité, potentiellement influencée par des facteurs externes (par exemple, événements ou météo spécifique).
+  - **Ligne de régression :** La ligne rouge montre une tendance linéaire positive, confirmant que les températures plus élevées encouragent les locations.
+
+**En conclusion :** La température moyenne est un facteur clé qui influence positivement l’utilisation des vélos. Ces informations sont particulièrement utiles pour prévoir la demande en fonction des prévisions météorologiques.
+
+
+
+### Relation entre la température ressentie et le nombre de vélos loués
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = temperature2, y = velos)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Relation entre Température ressentie et Nombre de vélos loués", 
+       x = "Température ressentie (°C)", 
+       y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Analyse :**
+
+- **Tendance générale :** Une forte relation positive est visible : une augmentation de la température ressentie entraîne une augmentation du nombre de vélos loués.
+- **Dispersion :**
+
+  - Aux températures ressenties basses (\<10°C), la demande est concentrée à des niveaux faibles.
+  - À des températures plus élevées (\>20°C), la demande augmente avec une variabilité accrue, ce qui peut refléter des effets saisonniers ou des conditions exceptionnelles.
+- **Ligne de régression :** La ligne rouge confirme une corrélation positive significative.
+
+**Conclusion :**  
+
+- La température ressentie est également un indicateur majeur des comportements des utilisateurs. Ces résultats complètent les observations sur la température moyenne et peuvent être exploités pour ajuster les ressources en fonction des conditions perçues.
+
+
+
+### Relation entre la vitesse du vent et le nombre de vélos loués
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = vent, y = velos)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Relation entre Vitesse du vent et Nombre de vélos loués", 
+       x = "Vitesse du vent (km/h)", 
+       y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Analyse :**
+
+- **Tendance générale :** La ligne de régression montre une corrélation très faible, suggérant que la vitesse du vent a un impact négligeable sur les locations.
+- **Dispersion :**
+  - La majorité des observations est concentrée entre des vitesses faibles à modérées (0 à 20 km/h).
+  - Aucune tendance significative n’est visible, quelle que soit la vitesse du vent.
+
+**En conclusion,** la vitesse du vent a un effet limité sur la demande en vélos. Cette variable peut être considérée comme secondaire dans l’analyse et la modélisation.
+
+
+
+### Relation entre l’humidité et le nombre de vélos loués
+
+```{r,echo=FALSE, fig.align='center'}
+ggplot(data = train, aes(x = humidite, y = velos)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Relation entre Humidité et Nombre de vélos loués", 
+       x = "Humidité (%)", 
+       y = "Nombre de vélos loués") +
+  theme_minimal()
+```
+
+**Analyse :**
+
+- **Tendance générale :** Une relation négative est observée : à mesure que l’humidité augmente, le nombre de vélos loués diminue.
+- **Dispersion :**
+  - À des niveaux d’humidité faibles (\<50 %), la demande est variée, avec des niveaux élevés possibles.
+  - À des niveaux d’humidité élevés (\>75 %), la demande diminue nettement et devient moins variable.
+- **Ligne de régression :** La pente descendante de la ligne rouge confirme la corrélation négative entre humidité et locations.
+
+**En conclusion **l’humidité est un facteur défavorable qui réduit l’utilisation des vélos. Ces informations peuvent être utilisées pour anticiper les baisses de demande pendant des conditions particulièrement humides.
+
+
+
+### Synthèse des observations
+
+1. **Températures moyennes et ressenties :** Ces deux variables montrent des relations positives significatives avec le nombre de vélos loués, confirmant leur importance dans l’utilisation des vélos.
+2. **Humidité :** La corrélation négative souligne son impact défavorable, limitant la demande en cas de forte humidité.
+3. **Vitesse du vent :** Cette variable a un effet limité sur la demande, et son rôle peut être considéré comme négligeable dans les analyses futures.
+
+Ces résultats mettent en évidence l’importance des conditions climatiques dans la gestion des vélos et permettront d’orienter les étapes de modélisation prédictive avec un focus particulier sur les températures et l’humidité.
+
+
+Voici une proposition pour une conclusion générale de votre compte rendu :
+
+
+### Conclusion Générale 
+
+À travers une analyse approfondie des données nous avons explorer les principaux facteurs influençant le nombre de locations de vélos dans un système de partage urbain, plusieurs observations significatives ont été mises en lumière :
+
+1. **Facteurs climatiques** : 
+   - La température joue un rôle majeur dans la demande en vélos, avec une relation positive claire entre des températures plus élevées et un nombre accru de locations. 
+   - À l'inverse, l'humidité a un effet négatif sur la demande, tandis que la vitesse du vent semble avoir un impact négligeable.
+
+2. **Facteurs temporels** :
+   - Les périodes estivales (mois d'été et saisons chaudes) connaissent une demande plus élevée, tandis que les périodes hivernales enregistrent une activité réduite. 
+   - Les jours de semaine et les horaires correspondant aux trajets domicile-travail (7h-11h et 15h-19h) montrent des pics d'activité, suggérant une forte utilisation pour des besoins pratiques.
+
+3. **Relations entre variables** :
+   - L’analyse des corrélations a révélé des redondances entre certaines variables, comme les deux mesures de température, nécessitant une attention particulière dans la modélisation afin d’éviter la multicolinéarité.
+
+Ces observations ont permis de mieux comprendre les comportements des utilisateurs de vélos en libre-service et d’identifier les leviers clés pour anticiper la demande. Ces résultats serviront de base dans la suite pour le développement d’un modèle prédictif robuste, qui pourra être utilisé pour optimiser la gestion des ressources, notamment en ajustant l’offre de vélos en fonction des périodes de forte ou faible demande.
+
+Enfin, cette étude met en évidence l’importance des données environnementales et temporelles dans la gestion d’un système de partage urbain. Elle ouvre également la voie à des études complémentaires pour intégrer d’autres paramètres, comme les événements locaux ou les infrastructures, dans les modèles prédictifs futurs.
+
+\clearpage
+
+\newpage    
+
+# Modèle linéaire généralisé
+## Transformation de la variable vélos
+Dans cette section, nous avons fait le choix d'effectué notre régression linéaire avec un modèle gaussien. Néanmoins, la variable prédictive vélos ne semble pas suivre une loi normale si l'on s'appuie sur l'histogramme suivant: 
+
+```{r,echo=FALSE}
+ggplot(data1, aes(x = velos)) +
+  geom_histogram(binwidth = 50, fill = "red", color = "black") +
+  labs(title = "Distribution de la variable vélos", x = "Nombre de vélos louer", y = "Frequence")
+```
+Ainsi, nous allons effectuer une transformation de la variable vélos.
+Afin de savoir quelle transformation utilisée, et avoir avoir essayé avec la transformation $\sqrt{velos}$,
+nous avons découvert la transformation de *Box-Cox*, qui permet de trouver la transformation qui rend la variable la plus proche d'une loi normale. Celle ci est définie par la formule suivante:
+
+$$B(x,\lambda) = \frac{x^\lambda - 1}{\lambda}$$ si $\lambda \neq 0$ et $log(x)$ si $\lambda = 0$.
+Pour trouver notre $\lambda$, nous utilisons la fonction *boxcoc* du package *MASS*.
+
+```{r,echo=FALSE}
+bc = boxcox(velos ~ saison + mois + jour_mois + jour_semaine + 
+            horaire + jour_travail + vacances + meteo + 
+            humidite + vent + temperature1 + temperature2, 
+            data = data1)
+lambda = bc$x[which.max(bc$y)]
+```
+Ainsi, le $\lambda$ qui maximise la vraisemblance est de 0.24. Nous allons donc effectuer la transformation suivante:
+$velo\_transformed=\frac{velo^{0.24}-1}{0.24}$
+
+L'histogramme suivant nous montre la distribution de la variable *velo_transformed*.
+```{r,echo=FALSE,fig.align='center'}
+ggplot(data1, aes(x = velos_transformed)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+  labs(title = "Distribution de la variable velos_transformed", x = "Transformée de Box-Cox du nombre de vélos loués", y = "Fréquence")
+```
+
+## Transformation de la variable humidité
+
+Lorsque l'on représente la relation entre les variables *humidité* et *velos_transformed* à l'aide d'un nuage de points, on obtient:
+
+```{r,echo=FALSE}
+ggplot(data1, aes(x = humidite, y = velos_transformed)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue", formula = y ~ poly(x, 2),) +
+  labs(title = "Relation entre humidité et velos_transformed",
+       x = "Humidité", y = "velos_transformed")
+
+```  
+Le graphique laisse à présager une relation quadratique entre ces deux variables. Ainsi, on introduit dans notre data set la variable *humidite2* qui correspond à *humidite²*.
+
+# Construction du modèle final
+
+Afin de construire notre modèle, nous allons tout d'abord éliminer les covariables qui ont peu d'influcent sur le nombre de vélos loués. Nous allons donc utiliser les méthodes forward, et backward, en prenant en compte les critères *AIC*, *BIC*, et le *CP de Mallow*.
+
+Nous allons partir pour les méthodes forward du modèle réduit à l'intercepte (*modele_intercept*), et pour les méthodes backward du modèle saturé (*modele_full*).
+
+```{r,echo=FALSE}
+modele_full=lm(velos_transformed ~saison + mois+ jour_mois+ jour_semaine
+               + horaire+ jour_travail+ vacances+ meteo+ 
+                 humidite+vent+temperature1+temperature2,data=train)
+modele_intercept=lm(velos_transformed ~1,data=train)
+```
+## Validation du modèle gaussien
+Nous allons passer en revue tous les postula du modèle gaussien, et nous allons vérifier si ceux-ci sont respectés.
+
+### [P1] Les résidus sont centrés
+
+```{r,echo=FALSE,fig.align="center"}
+autoplot(modele_full,1)
+```
+On observe ici que les résidus sont centrés autour de 0, et qu'il n'y a pas de tendance linéaire. Ainsi, le premier postulat est respecté. Contrairement à lorsque nous avions utilisé la variable *velo*, où une forte tendance était observée.
+
+### [P2] Les résidus sont homoscédastiques
+
+Afin de vérifier si les résidus sont homoscédastiques, nous allons effectuer un test de *Breusch-Pagan*.
+```{r,echo=FALSE,result='markup'}
+print(ncvTest(modele_full))
+```
+Ici, la p-value est de 65.3% ce qui est supérieur à 5%, ce qui signifie que les résidus sont homoscédastiques.
+
+### [P3] Les résidus sont décorélés
+Afin de vérifier si les résidus sont décorélés, nous allons effectuer un test de *Durbin-Watson*.
+
+```{r,echo=FALSE,result='markup'}
+print(durbinWatsonTest(modele_full))
+```
+La p-value est de 97.4%, ce qui est supérieur à 5%, ce qui signifie que les résidus sont décorélés.
+ 
+### [P4] Les résidus sont gaussiens
+Afin de vérifier si les résidus suivent une loi normale, nous allons effectuer un *Q-Q-plot*.
+```{r,echo=FALSE, fig.align="center"}
+autoplot(modele_full,2)
+```
+Malheureusement, le postulat [P4] ne semble pas être modifié malgré la transformation de notre variable.
+Nous allons tout de même continué notre étude, afin de voir si les prédictions sont néanmoins correctes.
+
+## Méthodes Step-by-step
+
+Avant d'implémenter nos modèles, on effectue un *test de type I anova* afin de connaitre les covariables qui sont susceptibles d'être éliminées. 
+
+```{r,echo=FALSE,results='markup'}
+anova(modele_full)
+```
+
+Les variables *jour_semaine* et *temperature2* ne sont pas significatives, avec des p-values respectives de 5.9% et 78.3%.
+
+### Suppression de la covariable *temperature2*
+
+Précèdemment, nous avons calculé le coefficient de corrélation entre *temperature1* et *temperature2*, et il s'élevait à *99%*. Elles sont donc très fortement corrélées, et comme *temperature2* n'est pas significative, nous faisons le choix de ne garder que temperature1.
+
+```{r,echo=FALSE}
+modele_full=lm(velos_transformed ~saison + mois + jour_mois + jour_semaine + horaire + jour_travail + vacances + meteo + humidite+ temperature1,data=train)
+modele_intercept=lm(velos_transformed~1,data=train)
+```
+
+### Critère AIC
+**Modèle forward AIC **
+```{r,echo=FALSE}
+mod_forwAIC=stepAIC(modele_intercept,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1,data=train,direction="forward",trace= FALSE)
+```
+
+```{r,echo=FALSE,results='markup'}
+mod_forwAIC
+```
+**Modèle backward AIC **
+```{r,echo=FALSE}
+mod_backwAIC=stepAIC(modele_full,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1,data=train,direction="backward",trace=FALSE)
+```
+
+```{r,echo=FALSE,results='markup'}
+mod_backwAIC
+```
+**Modèle both AIC **
+```{r,echo=FALSE}
+mod_bothAIC = stepAIC(modele_intercept,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1,data=train,direction="both",trace=FALSE)
+```
+
+```{r,echo=FALSE,results='markup'}
+mod_bothAIC
+``` 
+
+On remarque que pour le critère AIC, les méthodes *forward* et *both* construisent le même modèle, et *backward* est différent. Afin de savoir lequel on sauvegarde, on compare les critères AIC et l'on s'assure que le modèle choisi est bien meilleur que le modèle saturé à l'aide d'un *test de Type I anova*:
+
+```{r,echo=FALSE,results='markup'}
+AIC(mod_backwAIC,mod_forwAIC)
+```
+Le modèle conservé est donc : *vélos_transformed ~ horaire + mois + meteo + temperature1 + *
+*saison + humidite + vent + vacances*, car c'est celui qui possède le plus faible AIC.
+    
+```{r,echo=FALSE,results='markup'}
+anova(mod_forwAIC,modele_full)
+```
+De plus, le test *anova* renvoie une p-value de 1, donc le modèle choisi est bien meilleur que le modèle saturé.
+
+### Critère BIC:
+On se base désormais sur le critère *BIC*:
+
+```{r,echo=FALSE}
+n=length(train$velos_transformed)
+
+mod_forwBIC=stepAIC(modele_intercept,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1,data=train,direction="forward",trace= FALSE,k=log(n))
+```
+**Modèle forward BIC**:
+```{r,echo=FALSE,results='markup'}
+mod_forwBIC
+```
+
+```{r,echo=FALSE}
+mod_backwBIC=stepAIC(modele_full,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1,data=train,direction="backward",k=log(n),trace=FALSE)
+```
+**Modèle backward BIC**:
+```{r,echo=FALSE,results='markup'}
+mod_backwBIC
+```
+
+```{r,echo=FALSE}
+mod_bothBIC = stepAIC(modele_intercept,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1,data=train,direction="both",k=log(n),trace=FALSE)
+```
+**Modèle bothBIC**:
+```{r,echo=FALSE,results='markup'}
+mod_bothBIC
+```
+Ici encore, les modèles issues des méthodes *forward* et *both* sont identiques, et il correspond au modèle conservé précédemment avec le critère *AIC*. On compare les critères BIC pour savoir lequel on conserve:
+
+```{r,echo=FALSE,results='markup'}
+BIC(mod_backwBIC,mod_forwBIC)
+```
+On observe donc que le modèle ayant le plus faible *BIC* est le même que celui ayant le plus faible *AIC*. 
+
+### Critère CP de Mallow:
+On se base désormais sur le critère *CP de Mallow*:
+
+```{r,echo=FALSE}
+mod_forwCP=stepAIC(modele_intercept,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,direction="forward",trace= FALSE,k=2)
+```
+**Modèle forward CP**:
+
+```{r,echo=FALSE,results='markup'}
+mod_forwCP
+```
+
+```{r,echo=FALSE}
+mod_backwCP=stepAIC(modele_full,velos_transformed~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,direction="backward",k=2,trace=FALSE)
+```
+**Modèle backward CP**:
+```{r,echo=FALSE,results='markup'}
+mod_backwCP
+```
+
+```{r,echo=FALSE}
+mod_bothCP=stepAIC(modele_intercept,~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,direction="both",k=2,trace=FALSE)
+```
+**Modèle both CP**:
+```{r,echo=FALSE,results='markup'}
+mod_bothCP
+```
+Encore une fois, les modèles issues des méthodes *forward* et *both* sont identiques, et il correspond au modèle conservé précédemment avec les critères *AIC* et *BIC*. De plus, le modèle issue de la méthode *backward* est identique à celui issue de la méthode *backward* avec le critère *AIC*.  
+
+On décide donc de conserver deux modèles: 
+
+\begin{itemize}
+    \item \textbf{mod\_forwAIC} : 
+    \begin{align*}
+        \text{velos\_transformed} \sim \text{horaire} + \text{mois} + \text{meteo} + 
+        \text{temperature1} + \text{saison} + \text{humidite} + \text{vent} + \text{vacances}.
+    \end{align*}
+    \item \textbf{mod\_backwAIC} : 
+    \begin{align*}
+        \text{velos\_transformed} \sim \text{saison} + \text{mois} + \text{jour\_semaine} + 
+        \text{horaire} + \text{jour\_travail} + \text{meteo} + \text{humidite} + \text{temperature1}.
+    \end{align*}
+\end{itemize}
+
+# Prediction
+Nous allons effectué de la prédiction avec ces deux modèles, et observer qui est le plus performant.
+
+```{r,echo=FALSE}
+prediction = (predict(mod_forwAIC,test)*0.24+1)^(1/0.24) #on effetue 
+#cette transformation afin de repasser de la transformation de Box-Cox à vélos
+mse = mean((prediction - test$velos)^2)
+
+ggplot(data = data.frame(prediction = prediction, test = test$velos), aes(x = test, y = prediction)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(title = "Prédiction du modèle forward AIC", x = "Vélos réels", y = "Vélos prédits")
+```
+
+```{r,echo=FALSE,results='markup'}
+cat("MSE forward_AIC:  ", sqrt(mse),"\n") #on prend la racine carré du mse pour se ramener a l'unité "vélos"
+cat("AIC forward_AIC : ",AIC(mod_forwAIC),"\n")
+```
+
+Le modèle *forward AIC* a un *MSE* de  223.63, et le graphique ci-dessus montre que les valeurs prédites sont proches des valeurs réelles.
+
+```{r,echo=FALSE}
+prediction = (predict(mod_backwAIC,test)*0.24+1)^(1/0.24) #on effetue 
+#cette transformation afin de repasser de la transformation de Box-Cox à vélos
+mse = mean((prediction - test$velos)^2)
+
+ggplot(data = data.frame(prediction = prediction, test = test$velos), aes(x = test, y = prediction)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(title = "Prédiction du modèle backward AIC", x = "Vélos réels", y = "Vélos prédits")
+```
+
+```{r,echo=FALSE,results='markup'}
+cat("MSE backward_AIC:  ", sqrt(mse),"\n")
+cat("AIC backward_AIC",AIC(mod_backwAIC),"\n")
+```
+Le modèle *modèle backward AIC* a un *MSE* de  225.97, et le graphique ci-dessus est très ressemblant au précédent.
+
+**Conclusion**:
+  Les deux modèles sont très proches en terme de performance, et le choix entre les deux se fera en fonction de la question que l'on se pose. Si l'on souhaite un modèle plus simple, on choisira *mod backwAIC*, et si l'on souhaite un modèle plus précis, on choisira *mod forwAIC*.  
+  
+## Ajout d'interactions
+Nous allons ajouter des interractions à nos deux modèles afin de le rendre plus précis. Nous allons ajouter les interractions suivantes:
+
+### Interaction entre horaire et saison: 
+
+Le moment de la journée où les gens louent des vélos peut varier selon la saison. Par exemple :
+Les heures de clarté plus longues en été peuvent entraîner un plus grand nombre de locations en soirée.
+En hiver, le nombre de locations pourrait être inférieur, quelle que soit l'heure.  
+
+**Impact attendu** : Capture les effets saisonniers sur les schémas de location horaire.
+```{r,echo=FALSE,fig.align='center'}
+ggplot(data1, aes(x = horaire, y = velos, color = saison)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Interaction: Locations par période de la journée et par saison",
+       x = "Horaire", y = "velos_transformed") +
+  theme_minimal()
+```
+
+### Interaction entre horaire et météo:
+
+Les conditions météorologiques dépendent probablement de l'heure de la journée :
+Les matinées pluvieuses peuvent réduire les locations liées aux trajets domicile-travail.
+Les soirées claires peuvent encourager les déplacements de loisir.  
+
+**Impact attendu** : Reflète l'impact des conditions météorologiques sur le comportement de location à différents moments de la journée.
+
+```{r,echo=FALSE,fig.align='center'}
+ggplot(data1, aes(x = horaire, y = velos_transformed, color = meteo)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Interaction : Location en fonction de 
+       l'heure de la journée et des conditions météorologiques" ,
+       x = "Horaire", y = "velos_transformed") +
+  theme_minimal()
+
+
+```
+
+### Interaction entre météo et saison:
+
+Les conditions météorologiques interagissent fortement avec les saisons, car la perception et l'impact de la météo varient en fonction de la période de l'année. Par exemple, une journée froide en hiver est perçue comme normale et peut ne pas dissuader les cyclistes réguliers, tandis qu'une journée froide en été peut avoir un effet dissuasif plus marqué. De même, les pluies fréquentes au printemps peuvent être mieux tolérées que des pluies soudaines en automne.
+
+```{r,echo=FALSE,fig.align='center'}
+ggplot(data1, aes(x = meteo, y = velos_transformed, color = saison)) +
+  geom_point(alpha = 0.6) + 
+  geom_smooth(method = "lm", se = FALSE) + 
+  labs(title = "Interaction entre météo et saison",
+       x = "Météo",
+       y = "Vélos transformés",
+       color = "Saison") +
+  theme_minimal()
+```
+\newpage
+
+### Interaction entre température et humidité: 
+
+Le confort perçu à vélo dépend à la fois de la température et de l'humidité :
+Un taux d'humidité élevé associé à des températures élevées peut décourager la location.
+Les températures fraîches peuvent être mieux tolérées si l'humidité est faible.  
+
+**Impact attendu** : Modélisation de l'effet combiné des facteurs météorologiques sur le confort et le comportement des usagers.
+
+```{r,echo=FALSE}
+ggplot(data1, aes(x = temperature1, y = velos_transformed, color = humidite)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Interaction : Location en fonction de la température et de l'humidité perçues",
+       x = "Température1 (mesurée) (°C)", y = "velos_transformed") +
+  theme_minimal()
+```
+
+On ajoute donc ces quatres intéractions à nos deux modèles, et on effectue une prédiction pour voir si cela améliore la performance de nos modèles.  
+
+**Pour le modèle forward AIC:**
+```{r,echo=FALSE}
+mod_forwAIC_inter=lm(velos_transformed ~ horaire + mois + meteo + temperature1 + saison  + humidite + humidite2 + vent + vacances + meteo:horaire + horaire:saison+ temperature1:humidite2  + meteo:mois + meteo:saison , data = train)
+```
+
+On effectue un test de *type I anova* pour vérifier si les intéractions ajoutées sont significatives.
+
+```{r,echo=FALSE,results='markup'}
+anova(mod_forwAIC_inter)
+```
+
+Toutes les interactions ajoutées sont significatives, avec des p-values inférieures à 5% mis a part *temperature1:humidite2*. Nous faisons le choix de néanmoins conserver celle-ci dans le modèle.
+
+```{r,echo=FALSE}
+prediction = (predict(mod_forwAIC_inter,test)*0.24+1)^(1/0.24) #on effetue 
+#cette transformation afin de repasser de la transformation de Box-Cox à vélos
+mse = mean((prediction - test$velos)^2)
+
+ggplot(data = data.frame(prediction = prediction, test = test$velos), aes(x = test, y = prediction)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(title = "Prédiction du modèle forward AIC avec interaction", x = "Vélos réels", y = "Vélos prédits")
+```
+
+```{r,echo=FALSE,results='markup'}
+cat("MSE forward AIC with interaction :  ", sqrt(mse),"\n") #on prend la racine carré du mse pour se ramener a l'unité "vélos"
+cat("AIC forward AIC with interaction :  ", AIC(mod_forwAIC_inter))
+```
+
+Le modèle *mod forwAIC inter* a un *MSE* de  217.84 et un *AIC* de 4674.7, ce qui est une amélioration par rapport au modèle sans interaction (avec un MSE de 223.67 et un AIC de 4800.9). Le graphique ci-dessus montre que les valeurs prédites sont proches des valeurs réelles. Néanmoins, plus le nombre de vélos réels est elevé, plus la variance de la prédiction est elevée.  
+
+**Pour le modèle backward AIC:**
+
+```{r,echo=FALSE}
+mod_backwAIC_inter=lm(velos_transformed ~ saison + mois + jour_semaine + horaire + jour_travail + meteo + humidite + temperature1 + saison:horaire + meteo:horaire + saison:meteo+ temperature1:humidite, data = train)
+```
+On effectue un test de type I anova pour vérifier si les intéractions ajoutées sont significatives.
+```{r,echo=FALSE,results='markup'}
+anova(mod_backwAIC_inter)
+```
+
+```{r,echo=FALSE}
+prediction = (predict(mod_backwAIC_inter,test)*0.24+1)^(1/0.24) #on effetue 
+#cette transformation afin de repasser de la transformation de Box-Cox à vélos
+mse = mean((prediction - test$velos)^2)
+
+ggplot(data = data.frame(prediction = prediction, test = test$velos), aes(x = test, y = prediction)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(title = "Prédiction du modèle backward AIC avec interaction", x = "Vélos 
+       réels", y = "Vélos prédits")
+```
+
+```{r,echo=FALSE,results='markup'}
+cat("MSE backward AIC with interaction :  ", sqrt(mse),"\n") #on prend la racine
+#carré du mse pour se ramener a l'unité "vélos"
+cat("AIC forward AIC with interaction :  ", AIC(mod_backwAIC_inter))
+```
+
+Le modèle *backward AIC avec interaction* a un *MSE* de  222.01 et un *AIC* de 4733.8, ce qui est une amélioration par rapport au modèle sans interaction (avec un *MSE* de 225.97 et un *AIC* de 4821.7). Le graphique ci-dessus montre que les valeurs prédites sont proches des valeurs réelles. Néanmoins, plus le nombre de vélos réels est elevé, plus la variance de la prédiction est elevée.
+
+
+# Conclusion 
+Finalement, parmis nos deux modèles, celui qui ressort le plus performant est le modèle *mod forwAIC inter* défini par:
+
+\begin{center}
+\[
+\text{mod\_forwAIC\_inter} = 
+\text{velos\_transformed} \sim 
+\text{horaire} + \text{mois} + \text{meteo} + \text{temperature1} + 
+\text{saison} + \text{humidite} + \text{humidite2} + \text{vent}
+\]
+\[+ \text{vacances} + \text{meteo}:\text{horaire} + \text{horaire}:\text{saison} + 
+\text{temperature1}:\text{humidite2} + \text{meteo}:\text{mois} 
++ \text{meteo}:\text{saison}
+\]
+\end{center}
+
+
+Ce modèle est le modèle le plus précis que nous avons pu construire, comprenant les intéractions qui nous semblaient cohérentes. Nous aurions pu ajouter d'autres intéractions afin d'améliorer la prédiction, mais le modèle serait difficilement interprétable. De plus, il nous parraissait important de ne pas surcharger le modèle avec trop de variables, et de garder un modèle simple et interprétable. 
+
+\newpage
+# Modèles linéaires généralisés
+
+```{r,echo=FALSE}
+#On retire tous les ajouts effectués précédemment
+train$velos_transformed= NULL
+train$humidite2=NULL 
+train$velos_sqrt=NULL 
+test$velos_transformed=NULL
+test$velos_sqrt=NULL
+test$humidite2=NULL
+data1$velos_transformed=NULL
+data1$humidite2=NULL
+data1$velos_sqrt=NULL
+
+str(train)
+```
+
+Au vu de l'histogramme de la variable vélos, on peut voir que la distribution de la variable vélos est asymétrique et avec une large dispersion. Nous allons utiliser un modèle linéaire généralisé en utilisant la binomiale négative pour prédire le nombre de vélos loués.
+
+```{r,echo=FALSE}
+#on definit le modèle full
+model_glm <- glm.nb(velos ~ .,data = train )
+```
+ 
+```{r,echo=FALSE}
+#on definit le modèle reduit à l'intercept
+model_glm_null<-glm.nb(velos ~ 1 ,data = train )
+
+```
+
+## Choix du modèle
+### Méthode Step-by-Step
+
+Afin de choisir un modèle, nous avons opté pour les critères de sélection AIC, BIC et le CP de Mallow. C'est ainsi, avec la methode backward, forward et both, nous avons obtenu plusieurs modèles dont certains sont identiques. 
+
+
+```{r,echo=FALSE}
+modglm_forwAIC=stepAIC(model_glm_null,scope=velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,direction="forward",trace= FALSE)
+
+
+modglm_backwAIC=stepAIC(model_glm,velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,trace=FALSE,direction="backward")
+```
+
+```{r,echo=FALSE}
+ 
+modglm_bothAIC<-stepAIC(model_glm,velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,trace=F,direction=c('both'))
+modglm_bothAIC
+
+```
+
+
+```{r,echo=FALSE}
+n=nrow(train)
+modglm_forwBIC=stepAIC(model_glm_null,scope=velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,direction="forward",trace=FALSE,k=log(n))
+modglm_forwBIC
+
+```
+ 
+```{r,echo=FALSE}
+modglm_backwBIC=stepAIC(model_glm,velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,trace=FALSE,direction="backward",k=log(n))
+modglm_backwBIC
+
+```
+
+```{r,echo=FALSE}
+ 
+modglm_bothBIC<-stepAIC(model_glm,velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,trace=FALSE,direction=c('both'),k=log(n))
+
+
+```
+
+
+```{r,echo=FALSE}
+modglm_forwCP=stepAIC(model_glm_null,scope=velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,direction="forward",trace= FALSE,k=2)
+
+```
+
+ 
+```{r,echo=FALSE}
+modglm_backwCP=stepAIC(model_glm,velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,trace=FALSE,direction="backward",k=2)
+```
+
+```{r,echo=FALSE}
+ 
+modglm_bothCP<-stepAIC(model_glm,velos~saison+mois+jour_mois+jour_semaine+horaire+jour_travail+vacances+meteo+humidite+vent+temperature1+temperature2,data=train,trace=F,direction=c('both'),k=2)
+
+
+```
+  
+  
+  C'est ainsi qu'après  la definition de tous ces modèle, nous n'avons conservé que les modèles non identiques pour faire un test de comparaison en optant pour un test de rapport de vraisemblance.
+  Le test de rapport de vraisemblance nous permet de conclure que le modèle final est le modèle obtenu avec la méthode forward avec le critère AIC ainsi que le critère BIC.
+
+Ce modèle a été conservé puis des interactions possibles ont été ajouter pour confronter le mécanisme des locations de vélos avec ces interactions.De ce fait, un test anova a été réalisé pour décéler les interactions significatives.
+    
+```{r,echo=FALSE,results='markup'}
+print(LRstats(model_glm,modglm_forwAIC,modglm_bothAIC,modglm_backwAIC,modglm_backwBIC,modglm_backwCP))
+
+```
+
+
+
+
+```{r,echo=FALSE}
+
+modele_interaction_glm=glm.nb(velos~horaire+mois+meteo+temperature2+saison+humidite+vent+vacances+jour_travail+mois:temperature2+horaire:temperature2+jour_travail:temperature2+meteo:temperature2+humidite:temperature2+humidite:saison+humidite:mois+humidite:horaire+humidite:jour_travail+humidite:meteo+humidite:vacances,data=train)
+
+anova(modele_interaction_glm,test="Chisq")
+
+```
+Nous conserverons alors que les interactions significatives.
+```{r,echo=FALSE}
+
+modele_final_glm <- glm.nb(
+  velos ~ horaire+mois + meteo + temperature2+ saison+humidite+vent+
+          mois:temperature2 + horaire:temperature2,
+  data = train
+)
+
+anova(modele_final_glm,test="Chisq")
+
+
+```
+Donc après avoir ajouté les interactions, nous avons réalisé encore un test anova pour vérifier la significativité des interactions ajoutées. Nous avons conclu que les interactions ajoutées sont significatives.Par conséquent, nous avons conservé le modèle final avec les interactions significatives.
+D'où la formalisation mathématique du modèle final est: \(Y_i \sim \text{NB}(\mu_i, \phi)\), et \(g(\mathbb{E}[Y_{i} \mid x_{ij}]) = \mu_i\) avec \(\mu_i\) défini comme suit :
+\begin{center}
+\[
+\mu_i = \beta_0 + \beta_1 \cdot \text{horaire}_i + \beta_2 \cdot \text{mois}_i 
++ \beta_3 \cdot \text{meteo}_i + \beta_4 \cdot \text{temperature2}_i
++ \beta_5 \cdot \text{saison}_i + \beta_6 \cdot \text{humidite}_i 
++ \beta_7 \cdot \text{vent}_i \]
+\[+ \beta_8 \cdot (\text{mois}_i \cdot \text{temperature2}_i) 
++ \beta_9 \cdot (\text{horaire}_i \cdot \text{temperature2}_i).
+\] 
+\end{center}
+et g est la fonction de lien canonique définie \(\forall t \in \mathbb{R}, g(t) = \frac{r}{t+r}\) Avec r le paramètre de dispersion de la loi de la binomiale négative.
+
+## Analyse des résidus
+
+Ce graphique montre que les résidus ne sont pas uniformément répartis autour de zéro, ce qui peut indiquer que le modèle présente des limites dans son ajustement. Bien que les résidus oscillent autour de zéro, leur répartition suggère l'existence d'une structure non linéaire sous-jacente dans les données, que le modèle actuel pourrait ne pas capturer pleinement. En particulier, une augmentation de la dispersion des résidus pour des valeurs prévues élevées est notable, ce qui pourrait refléter un manque de flexibilité dans le modèle pour traiter ces valeurs. Cela suggère que d'autres formes de modélisation ou des transformations supplémentaires des variables explicatives pourraient être nécessaires pour mieux capturer les relations non linéaires présentes dans les données. Néanmoins, l'absence de schémas fortement systématiques ou de biais marqués dans l'ensemble des résidus reste un point positif.
+
+
+```{r,echo=FALSE}
+summary(modele_final_glm)
+```
+
+```{r,echo=FALSE}
+library(arm)
+binnedplot(fitted(modele_final_glm),residuals(modele_final_glm),col.int="blue",col.pts=2,xlab="Valeur prédites",ylab="Résidus")
+```
+
+## Prédiction et évaluation du modèle
+
+La prédiction effectuée par notre modèle final a été évaluée à l'aide de l'erreur quadratique moyenne (RMSE) qui est de 203 vélos. Cela signifie que notre modèle prédit en moyenne à 203 vélos près du nombre réel de vélos loués. Ce résultat peut être considéré comme satisfaisant au vu de la moyenne de vélos loués mais il reste des marges d'amélioration pour affiner les prédictions et réduire l'erreur.
+
+
+```{r,echo=FALSE}
+#prediction
+pred_glm <- predict(modele_final_glm, newdata = test, type = "response")
+RMSE_glm <- sqrt(mean((test$velos - pred_glm)^2))
+
+ggplot(data = test, aes(x = velos, y = pred_glm)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Comparaison des valeurs prédites et observées", 
+       x = "Valeurs observées", y = "Valeurs prédites")
+```
+```{r,echo=FALSE,results='markup'}
+cat("RMSE du modèle GLM : ", RMSE_glm, "\n")
+```
+
+## Limites du modèle et améliorations possibles.
+
+Bien qu'il est présenté une réduction de la RMSE par rapport au modèle linéaire classique, le modèle GLM présente des limites. En effet, comme souligné lors de l'analyse des résidus, le modèle GLM pourrait ne pas capturer pleinement les relations non-linéaires présentes dans les données.
+Toutefois, nous pouvons envisager des améliorations possibles pour le modèle GLM. Par exemple, l'ajout de termes quadratiques ou cubiques pour les variables continues pourrait permettre de mieux capturer les relations non-linéaires. De plus, l'ajout de nouvelles variables explicatives ou de transformations supplémentaires des variables existantes pourrait également améliorer la performance du modèle. Enfin, l'utilisation de méthodes de régularisation telles que la régression ridge ou LASSO pourrait aider à réduire le surajustement et à améliorer la généralisation du modèle.
