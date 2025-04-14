@@ -25,7 +25,8 @@ This work is the result of a collaborative effort between **Kevin Wardakhan**, *
 .
 ├── abdelatif_ouabdesselam_wardakhan_codeR.rmd     # R Markdown notebook with code and analysis
 ├── abdelatif_ouabdesselam_wardakhan_codeR.pdf     # Final report (compiled from R Markdown)
-├── MLG_Project_Instructions.pdf                    # Project guidelines and instructions
+├── MLG_Project_Instructions.pdf                   # Project guidelines and instructions
+├── data.csv                                       #Data set
 └── README.md                                      # Project documentation (this file)
 
 ```
